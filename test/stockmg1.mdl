@@ -1,0 +1,385 @@
+{UTF-8}
+********************************************************
+	.StockManagement
+********************************************************~
+		
+		Stock Management Structure 1
+		John Sterman (1999) Business Dynamics.  Irwin/McGraw-Hill
+		Copyright (c) 1999 John Sterman
+		
+		This is the generic stock management structure, developed in chapter 17.
+		Units are acquired with an exogenous acquisition delay, and orders are based
+		on replacement of expected losses adjusted to bring the stock and supply line up
+		to their desired levels.
+		
+		In this version, the desired supply line is based on the desired acquisition rate
+		and includes the adjustment for the stock (equation 17-16). The indicated order rate \
+		depends on
+		the desired acquisition rate adjusted to bring the supply line up to its desired \
+		level.
+		
+		The model is parameterized for capital investment.
+	|
+
+"Desired Stock S*"=
+	Initial Desired Stock*Input
+	~	Units
+	~	The desired stock  is exogenous.  A variety of test inputs allow users to try \
+		different patterns,
+		         including a step, pulse, sine wave, and random noise.
+	|
+
+Input=
+	1+STEP(Step Height,Step Time)+
+	(Pulse Quantity/TIME STEP)*PULSE(Pulse Time,TIME STEP)+
+	RAMP(Ramp Slope,Ramp Start Time,Ramp End Time)+
+	Sine Amplitude*SIN(2*3.14159*Time/Sine Period)+
+	  	STEP(1,Noise Start Time)
+	~	Dimensionless
+	~	Input is a dimensionless variable which provides a variety of test input patterns, \
+		including a step,
+		         pulse, sine wave, and random noise.
+	|
+
+Desired Acquisition Rate DAR=
+	Expected Loss Rate EL + Adjustment for Stock AS
+	~	Units/Year
+	~	The desired acquisition rate is expected losses adjusted to bring the stock
+		in line with the desired level.
+	|
+
+Indicated Orders IO=
+	Desired Acquisition Rate DAR +  Adjustment for Supply Line ASL
+	~	Units/Year
+	~	Indicated orders are based on the deired acquisition rate, then adjusted for to \
+		close any
+		gap between the desired and actual supply line.
+	|
+
+Stock S= INTEG (
+	Acquisition Rate AR-Loss Rate LR,
+		"Desired Stock S*")
+	~	Units
+	~	The stock accumulates acquisitions less discards.
+	|
+
+Adjustment for Stock AS=
+	("Desired Stock S*" - Stock S)/Stock Adjustment Time SAT
+	~	Units/Year
+	~	The adjustment for the stock is proportional to the gap between the \
+		desired and actual stock.
+	|
+
+Noise Start Time=
+	1
+	~	Year
+	~	Start time for the random input.
+	|
+
+Sine Period=50
+	~	Years
+	~	Period of sine wave in customer demand.  Set initially to 50 weeks (1 \
+		year).
+	|
+
+Pulse Quantity=0
+	~	Dimensionless*Year
+	~	The quantity to be injected to customer orders, as a fraction of the base value of \
+		Input. 
+		        For example, to pulse in a quantity equal to 50% of the current value of \
+		input, set to
+		         .50.
+	|
+
+Ramp End Time=1e+009
+	~	Year
+	~	End time for the ramp input.
+	|
+
+Ramp Slope=0
+	~	1/Year
+	~	Slope of the ramp input, as a fraction of the base value (per week).
+	|
+
+Sine Amplitude=0
+	~	Dimensionless
+	~	Amplitude of sine wave in customer orders (fraction of mean).
+	|
+
+Step Height=0
+	~	Dimensionless
+	~	Height of step input to customer orders, as fraction of initial value.
+	|
+
+Step Time=
+	1
+	~	Year
+	~	Time for the step input.
+	|
+
+Initial Desired Stock=
+	 100
+	~	Units
+	~	Initial value of the desired stock.
+	|
+
+Pulse Time=
+	1
+	~	Year
+	~	Time at which the pulse in Input occurs.
+	|
+
+Ramp Start Time=
+	1
+	~	Year
+	~	Start time for the ramp input.
+	|
+
+Acquisition Lag AL=
+	1.5
+	~	Years
+	~	The average delay between order and acquisition of new units.
+	|
+
+Adjustment for Supply Line ASL=
+	("Desired Supply Line SL*" - Supply Line SL)/Supply Line Adjustment Time SLAT
+	~	Units/Year
+	~	The order rate is adjusted to close any gap between the desired and actual \
+		supply line.
+	|
+
+Average Lifetime L=
+	8
+	~	Years
+	~	The average life of units in the stock is assumed to be 8 years.
+	|
+
+"Desired Supply Line SL*"=
+	Expected Acquisition Lag EAL*Desired Acquisition Rate DAR
+	~	Units
+	~	The desired supply line maintains sufficient units on order to yield the 
+		desired acquisition rate.
+	|
+
+Expected Acquisition Lag EAL=
+	Acquisition Lag AL
+	~	Years
+	~	The expected delay between order and acquisition of new units.  Assumed in this 
+		simple model to equal the actual acquisition lag, but is modeled more realistically
+		as an information delay of the actual value.
+	|
+
+Loss Rate LR=
+	Stock S/Average Lifetime L
+	~	Units/Year
+	~	First order discards with a constant average life are assumed.
+	|
+
+Supply Line Adjustment Time SLAT=
+	2
+	~	Years
+	~	The time period over which the gap between the desired and actual supply \
+		line is closed.
+	|
+
+Stock Adjustment Time SAT=
+	2
+	~	Years
+	~	The time period over which the gap between the desired and actual stock is \
+		closed.
+	|
+
+Acquisition Rate AR=
+	Supply Line SL/Acquisition Lag AL
+	~	Units/Year
+	~	The acquisition rate is determined by the quantity on order and the average \
+		acquisition delay.
+		In this simple model, the acquisition delay is first-order, but in general can be any
+		high-order process.
+	|
+
+Expected Loss Rate EL=
+	Loss Rate LR
+	~	Units/Year
+	~	Expected losses in this simple model are assumed to equal the actual loss \
+		rate.
+	|
+
+Order Rate OR=
+	MAX(0,Indicated Orders IO)
+	~	Units/Year
+	~	The order rate is constrained to be nonnegative.  Cancellations should be modeled \
+		explicitly
+		as a separate outflow from the supply line.
+	|
+
+Supply Line SL= INTEG (
+	+Order Rate OR-Acquisition Rate AR,
+		"Desired Supply Line SL*")
+	~	Units
+	~	The quantity on order; what has been ordered but not yet received.
+	|
+
+********************************************************
+	.Control
+********************************************************~
+		Simulation Control Paramaters
+	|
+
+FINAL TIME  = 20
+	~	Year
+	~	The final time for the simulation.
+	|
+
+INITIAL TIME  = 0
+	~	Year
+	~	The initial time for the simulation.
+	|
+
+SAVEPER  = 
+        TIME STEP
+	~	Year
+	~	The frequency with which output is stored.
+	|
+
+TIME STEP  = 0.0625
+	~	Year
+	~	The time step for the simulation.
+	|
+
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*Stock Management
+$192-192-192,0,Helvetica|10|B|0-0-0|0-0-0|0-0-0|-1--1--1|-1--1--1|96,96,100,0
+10,1,Supply Line SL,248,194,40,20,3,3,0,0,0,0,0,0
+10,2,Stock S,536,192,40,20,3,3,0,0,0,0,0,0
+12,3,48,102,193,10,8,0,3,0,0,-1,0,0,0
+1,4,6,1,4,0,0,22,0,0,0,-1--1--1,,1|(186,193)|
+1,5,6,3,100,0,0,22,0,0,0,-1--1--1,,1|(132,193)|
+11,6,48,159,193,6,8,34,3,0,0,1,0,0,0
+10,7,Order Rate OR,159,221,40,20,40,3,0,0,-1,0,0,0
+1,8,10,2,4,0,0,22,0,0,0,-1--1--1,,1|(448,190)|
+1,9,10,1,100,0,0,22,0,0,0,-1--1--1,,1|(338,190)|
+11,10,844,394,190,6,8,34,3,0,0,1,0,0,0
+10,11,Acquisition Rate AR,394,218,40,20,40,3,0,0,-1,0,0,0
+12,12,48,698,193,10,8,0,3,0,0,-1,0,0,0
+1,13,15,12,4,0,0,22,0,0,0,-1--1--1,,1|(664,191)|
+1,14,15,2,100,0,0,22,0,0,0,-1--1--1,,1|(602,191)|
+11,15,48,635,191,6,8,34,3,0,0,1,0,0,0
+10,16,Loss Rate LR,635,220,33,21,40,3,0,0,-1,0,0,0
+10,17,Indicated Orders IO,143,390,46,26,8,3,0,0,0,0,0,0
+10,18,Adjustment for Supply Line ASL,292,374,47,24,8,3,0,0,0,0,0,0
+10,19,"Desired Supply Line SL*",424,402,41,28,8,3,0,0,0,0,0,0
+10,20,Adjustment for Stock AS,574,404,38,29,8,3,0,0,0,0,0,0
+10,21,Expected Loss Rate EL,715,519,41,29,8,3,0,0,0,0,0,0
+10,22,Acquisition Lag AL,316,114,44,18,8,3,0,0,0,0,0,0
+1,23,2,16,1,0,43,0,0,192,0,-1--1--1,,1|(579,227)|
+1,24,17,7,1,0,43,0,0,192,0,-1--1--1,,1|(121,242)|
+1,25,18,17,1,0,43,0,0,64,0,-1--1--1,,1|(225,397)|
+1,26,19,18,1,0,43,0,0,192,0,-1--1--1,,1|(368,369)|
+1,27,1,11,1,0,43,0,0,192,0,-1--1--1,,1|(289,233)|
+1,28,22,10,1,0,45,0,0,192,0,-1--1--1,,1|(385,152)|
+1,29,1,18,1,0,45,0,0,192,0,-1--1--1,,1|(282,251)|
+1,30,2,20,1,0,45,0,0,192,0,-1--1--1,,1|(583,367)|
+1,31,16,21,1,0,43,0,0,192,0,-1--1--1,,1|(750,382)|
+12,32,0,195,287,20,20,4,4,0,0,-1,0,0,0
+B
+12,33,0,397,286,20,20,4,4,0,0,-1,0,0,0
+B
+12,34,0,196,320,40,20,8,4,0,8,-1,0,0,0,0-0-0,0-0-0,|8|B|0-0-0
+Supply Line Control
+12,35,0,398,320,34,24,8,4,0,8,-1,0,0,0,0-0-0,0-0-0,|8|B|0-0-0
+Stock Control
+10,36,Stock Adjustment Time SAT,652,448,46,24,8,3,0,0,0,0,0,0
+10,37,Supply Line Adjustment Time SLAT,323,461,41,35,8,3,0,0,0,0,0,0
+1,38,37,18,1,0,45,0,0,192,0,-1--1--1,,1|(344,402)|
+1,39,36,20,1,0,45,0,0,192,0,-1--1--1,,1|(597,452)|
+10,40,Expected Acquisition Lag EAL,503,305,43,30,8,3,0,0,0,0,0,0
+1,41,40,19,1,0,43,0,0,192,0,-1--1--1,,1|(493,348)|
+1,42,22,40,1,0,43,0,0,192,0,-1--1--1,,1|(452,176)|
+10,43,Desired Acquisition Rate DAR,441,545,42,28,8,3,0,0,0,0,0,0
+1,44,21,43,1,0,43,0,0,192,0,-1--1--1,,1|(555,551)|
+1,45,43,19,1,0,43,0,0,192,0,-1--1--1,,1|(455,436)|
+10,46,Average Lifetime L,578,114,36,20,8,3,0,0,0,0,0,0
+1,47,46,15,1,0,45,0,0,192,0,-1--1--1,,1|(621,143)|
+10,48,"Desired Stock S*",676,359,32,18,8,3,0,0,-1,0,0,0
+10,49,Initial Desired Stock,791,320,39,29,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,50,49,48,0,1,0,0,0,0,0,-1--1--1,,1|(736,338)|
+10,51,Input,796,395,40,20,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,52,51,48,0,1,0,0,0,0,0,-1--1--1,,1|(738,377)|
+1,53,48,20,1,0,43,0,0,192,0,-1--1--1,,1|(646,387)|
+1,54,20,43,1,0,43,0,0,192,0,-1--1--1,,1|(518,501)|
+1,55,43,17,1,0,43,0,0,192,0,-1--1--1,,1|(202,467)|
+1,56,19,1,0,0,0,0,0,64,1,-1--1--1,,1|(337,299)|
+1,57,48,2,0,0,0,0,0,64,1,-1--1--1,,1|(611,281)|
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*Deired Stock
+$192-192-192,0,Helvetica|10|B|0-0-0|0-0-0|0-0-0|-1--1--1|-1--1--1|96,96,100,0
+10,1,Input,253,118,26,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+10,2,Input,354,333,18,9,0,3,0,0,-1,0,0,0
+10,6,Initial Desired Stock,260,170,40,20,8,3,0,50,0,0,0,0,-1--1--1,0-0-0,Helvetica|12|B|0-0-0
+10,10,Noise Start Time,367,264,55,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,11,Pulse Quantity,442,294,48,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,12,Pulse Time,449,330,38,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,13,Ramp End Time,290,422,53,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,14,Ramp Slope,254,364,41,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,15,Ramp Start Time,252,394,56,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,16,Sine Amplitude,459,358,51,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,17,Sine Period,446,396,40,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,18,Step Height,359,437,39,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,19,Step Time,412,417,35,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,20,Time,250,315,26,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+10,21,TIME STEP,250,340,45,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,25,10,2,0,0,0,0,0,0,0,-1--1--1,,1|(361,291)|
+1,26,11,2,0,0,0,0,0,0,0,-1--1--1,,1|(403,311)|
+1,27,12,2,0,0,0,0,0,0,0,-1--1--1,,1|(398,331)|
+1,28,13,2,0,0,0,0,0,0,0,-1--1--1,,1|(317,383)|
+1,29,14,2,0,0,0,0,0,0,0,-1--1--1,,1|(302,348)|
+1,30,15,2,0,0,0,0,0,0,0,-1--1--1,,1|(296,367)|
+1,31,16,2,1,0,0,0,0,0,0,-1--1--1,,1|(389,344)|
+1,32,17,2,0,0,0,0,0,0,0,-1--1--1,,1|(405,368)|
+1,33,18,2,0,0,0,0,0,0,0,-1--1--1,,1|(356,391)|
+1,34,19,2,0,0,0,0,0,0,0,-1--1--1,,1|(387,380)|
+1,35,20,2,0,0,0,0,0,0,0,-1--1--1,,1|(299,322)|
+1,36,21,2,0,0,0,0,0,0,0,-1--1--1,,1|(308,336)|
+1,45,9,2,0,0,0,0,0,0,0,-1--1--1,,1|(308,304)|
+10,46,"Desired Stock S*",378,138,40,20,8,3,0,0,0,0,0,0
+1,47,1,46,0,0,43,0,0,192,0,-1--1--1,,1|(301,125)|
+1,48,6,46,0,0,43,0,0,192,0,-1--1--1,,1|(312,156)|
+///---\\\
+:GRAPH STOCKS
+:TITLE Stocks
+:X-AXIS time
+:SCALE
+:VAR Stock S
+:VAR Supply Line SL
+
+:GRAPH FLOWS
+:TITLE Flows
+:X-AXIS time
+:SCALE
+:VAR Loss Rate LR
+:VAR Acquisition Rate AR
+:VAR Order Rate OR
+:VAR Indicated Orders IO
+
+:GRAPH ADJUSTMENTS
+:TITLE Adjustments
+:X-AXIS time
+:SCALE
+:VAR Adjustment for Stock AS
+:VAR Adjustment for Supply Line ASL
+:L<%^E!@
+1:Current.vdf
+9:Current
+22:Year,Years
+15:0,0,0,0,0,0
+19:100,0
+27:2,
+34:0,
+4:Time
+5:Supply Line SL
+24:0
+25:20
+26:20

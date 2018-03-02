@@ -1,0 +1,113 @@
+{UTF-8}
+inflow=
+	stock/inflow DT
+	~	1/Month
+	~		|
+
+inflow DT=
+	0.25
+	~	Month
+	~		|
+
+init stock=
+	5
+	~	dmnl
+	~		|
+
+outflow=
+	stock/outflow DT
+	~	1/Month
+	~		|
+
+outflow DT=
+	0.3
+	~	Month
+	~		|
+
+stock= INTEG (
+	inflow-outflow,
+		init stock)
+	~	dmnl
+	~		|
+
+********************************************************
+	.Control
+********************************************************~
+		Simulation Control Parameters
+	|
+
+FINAL TIME  = 100
+	~	Month
+	~	The final time for the simulation.
+	|
+
+INITIAL TIME  = 0
+	~	Month
+	~	The initial time for the simulation.
+	|
+
+SAVEPER  = 
+        TIME STEP 
+	~	Month [0,?]
+	~	The frequency with which output is stored.
+	|
+
+TIME STEP  = 1
+	~	Month [0,?]
+	~	The time step for the simulation.
+	|
+
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*View 1
+$192-192-192,0,Arial|12||0-0-0|0-0-0|0-0-255|-1--1--1|-1--1--1|96,96,100,0
+10,1,stock,635,299,40,20,3,3,0,0,0,0,0,0
+12,2,48,426,297,10,8,0,3,0,0,-1,0,0,0
+1,4,6,1,4,0,0,22,0,0,0,-1--1--1,,1|(558,297)|
+1,5,6,2,100,0,0,22,0,0,0,-1--1--1,,1|(472,297)|
+11,6,0,515,297,6,8,34,3,0,0,1,0,0,0
+10,7,inflow,515,315,22,10,40,3,0,0,-1,0,0,0
+12,8,48,875,300,10,8,0,3,0,0,-1,0,0,0
+1,10,12,8,4,0,0,22,0,0,0,-1--1--1,,1|(820,300)|
+1,11,12,1,100,0,0,22,0,0,0,-1--1--1,,1|(719,300)|
+11,12,0,770,300,6,8,34,3,0,0,1,0,0,0
+10,13,outflow,770,318,26,10,40,3,0,0,-1,0,0,0
+1,14,1,12,1,0,43,0,0,64,0,-1--1--1,,1|(659,249)|
+10,15,outflow DT,763,387,39,10,8,3,0,0,0,0,0,0
+1,16,15,13,1,0,45,0,2,64,0,-1--1--1,|0||-1--1--1,1|(775,361)|
+10,17,init stock,635,268,33,10,8,3,0,0,0,0,0,0
+1,18,17,1,0,0,43,0,0,64,1,-1--1--1,,1|(635,271)|
+10,19,inflow DT,515,383,34,10,8,3,0,0,0,0,0,0
+1,20,19,7,0,0,45,0,2,64,0,-1--1--1,|0||-1--1--1,1|(515,356)|
+1,21,1,6,1,0,43,0,0,64,0,-1--1--1,,1|(598,246)|
+///---\\\
+:L<%^E!@
+1:Current.vdf
+1:TS1.vdf
+1:TSsmall.vdf
+9:TSsmall
+22:$,Dollar,Dollars,$s
+22:Day,Days
+22:Hour,Hours
+22:Month,Months
+22:Person,People,Persons
+22:Unit,Units
+22:Week,Weeks
+22:Year,Years
+15:0,0,0,0,0,0
+19:100,0
+27:2,
+34:0,
+4:Time
+5:stock
+35:Date
+36:YYYY-MM-DD
+37:2000
+38:1
+39:1
+40:2
+41:0
+42:1
+24:0
+25:100
+26:100

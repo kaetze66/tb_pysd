@@ -1,0 +1,269 @@
+{UTF-8}
+********************************************************
+	.StockManagement
+********************************************************~
+		
+		First-order stock management model
+		John Sterman (1999) Business Dynamics.  Irwin/McGraw-Hill
+		Copyright (c) 1999 John Sterman
+		
+		This model, developed in chapter 17, is the first-order stock-management
+		structure.  The acquisition rate equals the desired acquisition rate,
+		that is, there is no acquisition delay.
+	|
+
+Input=
+	1+STEP(Step Height,Step Time)+
+	(Pulse Quantity/TIME STEP)*PULSE(Pulse Time,TIME STEP)+
+	RAMP(Ramp Slope,Ramp Start Time,Ramp End Time)+
+	Sine Amplitude*SIN(2*3.14159*Time/Sine Period)+
+	  	STEP(1,Noise Start Time)
+	~	Dimensionless
+	~	Input is a dimensionless variable which provides a variety of test input patterns, \
+		including a step,
+		         pulse, sine wave, and random noise.
+	|
+
+Adjustment for Stock AS=
+	("Desired Stock S*" - Stock S)/Stock Adjustment Time SAT
+	~	Units/Year
+	~	The adjustment for the stock is proportional to the gap between the \
+		desired and actual stock.
+	|
+
+"Desired Stock S*"=
+	Initial Desired Stock*Input
+	~	Units
+	~	The desired stock  is exogenous.  A variety of test inputs allow users to try \
+		different patterns,
+		         including a step, pulse, sine wave, and random noise.
+	|
+
+Stock S= INTEG (
+	Acquisition Rate AR-Loss Rate LR,
+		"Desired Stock S*")
+	~	Units
+	~	The stock accumulates acquisitions less discards.
+	|
+
+Pulse Quantity=0
+	~	Dimensionless*Year
+	~	The quantity to be injected to customer orders, as a fraction of the base value of \
+		Input. 
+		        For example, to pulse in a quantity equal to 50% of the current value of \
+		input, set to
+		         .50.
+	|
+
+Pulse Time=
+	1
+	~	Year
+	~	Time at which the pulse in Input occurs.
+	|
+
+Ramp Slope=0
+	~	1/Year
+	~	Slope of the ramp input, as a fraction of the base value (per week).
+	|
+
+Sine Amplitude=0
+	~	Dimensionless
+	~	Amplitude of sine wave in customer orders (fraction of mean).
+	|
+
+Initial Desired Stock=
+	 100
+	~	Units
+	~	Initial value of the desired stock.
+	|
+
+Step Time=
+	1
+	~	Year
+	~	Time for the step input.
+	|
+
+Noise Start Time=
+	1
+	~	Year
+	~	Start time for the random input.
+	|
+
+Sine Period=50
+	~	Years
+	~	Period of sine wave in customer demand.  Set initially to 50 weeks (1 \
+		year).
+	|
+
+Step Height=0
+	~	Dimensionless
+	~	Height of step input to customer orders, as fraction of initial value.
+	|
+
+Ramp End Time=1e+009
+	~	Year
+	~	End time for the ramp input.
+	|
+
+Ramp Start Time=
+	1
+	~	Year
+	~	Start time for the ramp input.
+	|
+
+Acquisition Rate AR=
+	MAX(0, Desired Acquisition Rate DAR)
+	~	Units/Year
+	~	The acquisition rate is determined by th desired acquisition rate (no acquisition \
+		delay), but 
+		constrained to be nonnegative.
+	|
+
+Average Life=
+	8
+	~	Years
+	~	The average life of units in the stock is assumed to be 8 years.
+	|
+
+Desired Acquisition Rate DAR=
+	Expected Loss Rate EL + Adjustment for Stock AS
+	~	Units/Year
+	~	The desired acquisition rate is expected losses adjusted to bring the stock
+		in line with the desired level.
+	|
+
+Expected Loss Rate EL=
+	Loss Rate LR
+	~	Units/Year
+	~	Expected losses in this simple model are assumed to equal the actual loss \
+		rate.
+	|
+
+Loss Rate LR=
+	Stock S/Average Life
+	~	Units/Year
+	~	First order discards with a constant average life are assumed.
+	|
+
+Stock Adjustment Time SAT=
+	3
+	~	Years
+	~	The time period over which the gap between the desired and actual stock is \
+		closed.
+	|
+
+********************************************************
+	.Control
+********************************************************~
+		Simulation Control Paramaters
+	|
+
+FINAL TIME  = 10
+	~	Year
+	~	The final time for the simulation.
+	|
+
+INITIAL TIME  = 0
+	~	Year
+	~	The initial time for the simulation.
+	|
+
+SAVEPER  = 
+        TIME STEP
+	~	Year
+	~	The frequency with which output is stored.
+	|
+
+TIME STEP  = 0.0625
+	~	Year
+	~	The time step for the simulation.
+	|
+
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*Stock Management Structure
+$192-192-192,0,Helvetica|10|B|0-0-0|0-0-0|0-0-0|-1--1--1|-1--1--1|96,96,100,0
+10,1,Stock S,517,233,40,20,3,3,0,0,0,0,0,0
+12,2,48,662,235,10,8,0,3,0,0,-1,0,0,0
+1,3,5,2,4,0,0,22,0,0,0,-1--1--1,,1|(629,233)|
+1,4,5,1,100,0,0,22,0,0,0,-1--1--1,,1|(575,233)|
+11,5,48,600,233,6,8,34,3,0,0,1,0,0,0
+10,6,Loss Rate LR,600,262,33,21,40,3,0,0,-1,0,0,0
+10,7,Adjustment for Stock AS,510,408,39,25,8,3,0,0,0,0,0,0
+10,8,Expected Loss Rate EL,501,555,38,25,8,3,0,0,0,0,0,0
+1,9,1,6,1,0,43,0,0,192,0,-1--1--1,,1|(566,277)|
+1,10,1,7,1,0,45,0,0,192,0,-1--1--1,,1|(532,360)|
+1,11,6,8,1,0,43,0,0,192,0,-1--1--1,,1|(649,487)|
+12,12,0,426,328,20,20,4,4,0,0,-1,0,0,0
+B
+12,13,0,427,362,34,24,8,4,0,8,-1,0,0,0,0-0-0,0-0-0,|8|B|0-0-0
+Stock Control
+12,14,48,367,234,10,8,0,3,0,0,-1,0,0,0
+1,15,17,1,4,0,0,22,0,0,0,-1--1--1,,1|(452,233)|
+1,16,17,14,100,0,0,22,0,0,0,-1--1--1,,1|(396,233)|
+11,17,48,421,233,6,8,34,3,0,0,1,0,0,0
+10,18,Acquisition Rate AR,421,261,40,20,40,3,0,0,-1,0,0,0
+10,19,Desired Acquisition Rate DAR,335,407,40,29,8,3,0,0,0,0,0,0
+1,20,8,19,1,0,43,0,0,192,0,-1--1--1,,1|(342,454)|
+1,21,7,19,1,0,43,0,0,192,0,-1--1--1,,1|(403,431)|
+1,22,19,18,1,0,43,0,0,192,0,-1--1--1,,1|(325,308)|
+10,23,Stock Adjustment Time SAT,480,481,42,32,8,3,0,0,0,0,0,0
+1,24,23,7,1,0,45,0,0,192,0,-1--1--1,,1|(507,440)|
+10,25,Average Life,582,153,34,16,8,3,0,0,0,0,0,0
+1,26,25,5,1,0,45,0,0,192,0,-1--1--1,,1|(617,196)|
+10,27,"Desired Stock S*",614,443,37,18,8,3,0,0,-1,0,0,0
+10,28,Initial Desired Stock,764,409,41,24,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,29,28,27,0,1,0,0,0,0,0,-1--1--1,,1|(693,424)|
+10,30,Input,765,487,40,20,8,2,1,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,31,30,27,0,1,0,0,0,0,0,-1--1--1,,1|(694,466)|
+1,32,27,7,1,0,43,0,0,192,0,-1--1--1,,1|(549,435)|
+1,33,27,1,0,0,0,0,0,64,1,-1--1--1,,1|(568,345)|
+\\\---/// Sketch information - do not modify anything except names
+V300  Do not put anything below this section - it will be ignored
+*Desired Stock
+$192-192-192,0,Helvetica|10|B|0-0-0|0-0-0|0-0-0|-1--1--1|-1--1--1|96,96,100,0
+10,1,Input,253,118,26,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+10,2,Input,354,333,18,9,0,3,0,0,-1,0,0,0
+10,6,Initial Desired Stock,260,170,40,20,8,3,0,50,0,0,0,0,-1--1--1,0-0-0,Helvetica|12|B|0-0-0
+10,10,Noise Start Time,367,264,55,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,11,Pulse Quantity,442,294,48,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,12,Pulse Time,449,330,38,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,13,Ramp End Time,290,422,53,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,14,Ramp Slope,254,364,41,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,15,Ramp Start Time,252,394,56,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,16,Sine Amplitude,459,358,51,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,17,Sine Period,446,396,40,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,18,Step Height,359,437,39,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,19,Step Time,412,417,35,9,0,3,0,1,-1,0,0,0,128-128-128,0-0-0,|12|B|0-0-0
+10,20,Time,250,315,26,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+10,21,TIME STEP,250,340,45,9,0,2,0,3,-1,0,0,0,128-128-128,0-0-0,|12|B|128-128-128
+1,25,10,2,0,0,0,0,0,0,0,-1--1--1,,1|(361,291)|
+1,26,11,2,0,0,0,0,0,0,0,-1--1--1,,1|(403,311)|
+1,27,12,2,0,0,0,0,0,0,0,-1--1--1,,1|(398,331)|
+1,28,13,2,0,0,0,0,0,0,0,-1--1--1,,1|(317,383)|
+1,29,14,2,0,0,0,0,0,0,0,-1--1--1,,1|(302,348)|
+1,30,15,2,0,0,0,0,0,0,0,-1--1--1,,1|(296,367)|
+1,31,16,2,1,0,0,0,0,0,0,-1--1--1,,1|(389,344)|
+1,32,17,2,0,0,0,0,0,0,0,-1--1--1,,1|(405,368)|
+1,33,18,2,0,0,0,0,0,0,0,-1--1--1,,1|(356,391)|
+1,34,19,2,0,0,0,0,0,0,0,-1--1--1,,1|(387,380)|
+1,35,20,2,0,0,0,0,0,0,0,-1--1--1,,1|(299,322)|
+1,36,21,2,0,0,0,0,0,0,0,-1--1--1,,1|(308,336)|
+1,45,9,2,0,0,0,0,0,0,0,-1--1--1,,1|(308,304)|
+10,46,"Desired Stock S*",378,138,40,20,8,3,0,0,0,0,0,0
+1,47,1,46,0,0,43,0,0,192,0,-1--1--1,,1|(301,125)|
+1,48,6,46,0,0,43,0,0,192,0,-1--1--1,,1|(312,156)|
+///---\\\
+:L<%^E!@
+1:Current.vdf
+9:Current
+22:year,years
+15:0,0,0,0,0,0
+19:100,0
+27:2,
+34:0,
+4:Time
+5:Stock S
+24:0
+25:10
+26:10
