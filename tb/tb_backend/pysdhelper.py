@@ -19,7 +19,6 @@ integration:
 is integrated in the battery. Each model is treated with the pysd helper before run through the testing battery.
 
 todo:
-config file in testingbattery\_config\pysdhelper_config.txt
 probably doesn't work with Macros
 
 output:
