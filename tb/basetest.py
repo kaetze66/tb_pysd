@@ -71,11 +71,16 @@ class Test:
         self.test = self.folder_type_dict[test_name]
         self.err_file_name = '%s_error_file.txt' % test_name
         # config file is defined and read in here
+        # this doesn't need to be an attribute 30.07.18/sk
         self.cf = ConfigParser()
         # config folder doesn't change, so it's put here to it's on one line
         self.cf.read(os.path.join(os.path.split(folder)[0], '_config', 'tb_config.ini'))
         self.testing_mode = self.cf['testing'].getboolean('testing_mode', fallback=False)
         self.full_df_output = self.cf['testing'].getboolean('full_df_output', fallback=True)
+        self.cf.read(os.path.join(os.path.split(folder)[0], '_config', 'settings.ini'))
+        self.node_width = self.cf['basetest'].get('node_width', fallback='2')
+        self.node_height = self.cf['basetest'].get('node_height', fallback='1.2')
+        # test with sens is just to avoid having to calculate the sens and norm runs for every test
         self.test_with_sens = ['sens']
 
     # Folder Operations #
@@ -235,8 +240,8 @@ class Test:
                                       'labelloc': 't',
                                       'URL': '',
                                       'fixedsize': 'True',
-                                      'width': '2',
-                                      'height': '1.2',
+                                      'width': self.node_width,
+                                      'height': self.node_height,
                                       })
                 elements = row['elements']
                 elements = set(elements)
