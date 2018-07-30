@@ -27,8 +27,8 @@ Output is a vensim compatible adjusted model.
 To create a xlsx file with all the data go to Model --> Export Dataset and export the data.vdf file.
 Make sure under the option "Time Running" the check is set at "down".
 
-Version 0.2
-Update 14.06.18/sk
+Version 0.3
+Update 30.07.18/sk
 
 """
 
@@ -43,6 +43,10 @@ from configparser import ConfigParser
 
 
 class PysdHelper:
+    """
+    PySD helper increases compatibility with PySD for the translation of models.
+    """
+
     def __init__(self, folder, filename):
         self.folder = folder
         self.filename = filename
@@ -81,6 +85,8 @@ class PysdHelper:
         self.set_saveper = self.cf['PySD helper control'].getboolean('replace_saveper', fallback=True)
         self.del_comments = self.cf['PySD helper control'].getboolean('delete_comments', fallback=True)
         self.set_DF = self.cf['PySD helper control'].getboolean('replace_DF', fallback=True)
+        self.set_DI = self.cf['PySD helper control'].getboolean('replace_DI', fallback=True)
+        self.set_DM = self.cf['PySD helper control'].getboolean('replace_DM', fallback=True)
 
     # helper methods #
 
@@ -144,6 +150,24 @@ class PysdHelper:
         el[0] = el[0].replace('==', '=')
         return el
 
+    @staticmethod
+    def elim_singlequote(el):
+        """
+        PySD cannot handle the single quotation mark in names such as competitors' something
+        So we remove it
+
+        Input is:
+        [var'name==expr,unit]
+
+        Output is:
+        [varname=expr,unit]
+
+        :param el: list of element with variable information
+        :return: list of element with removed single quotation mark
+        """
+        el[0] = el[0].replace("'", "")
+        return el
+
     def data_input_conversion(self, el):
         """
         PySD cannot handle the data inputs from Vensim so this function replaces the data inputs
@@ -195,11 +219,12 @@ class PysdHelper:
             return el, None
 
     @staticmethod
-    def repl_df(el):
+    def repl_delay(el, delay_type):
         """
         PySD cannot handle delay fixed at the moment so they are replaced with delay n to the 100th order.
         This might make graph interpretations a bit more difficult but it's the best we can do at the moment.
         Delay fixed are unfortunately quite popular.
+        also replaces Delay Information and Delay Material
 
         Input is:
         [varname=DELAY FIXED(Input,DelayTime,Init),Unit]
@@ -207,9 +232,18 @@ class PysdHelper:
         Output is:
         [varname=Delay N(Input,DelayTime,Init,100),Unit]
 
+        :param delay_type: string, type of delay to be replaced
         :param el: list of element with variable information
         :return: list of element with corrected Delay Fixed
         """
+        if delay_type == 'fixed':
+            rep_func = 'DELAY'
+        elif delay_type == 'information':
+            rep_func = 'SMOOTH'
+        elif delay_type == 'material':
+            rep_func = 'DELAY'
+        else:
+            rep_func = ''
         var, in_expr = el[0].split('=')
         in_expr = in_expr.split('(', 1)[1]
         in_expr = in_expr.rsplit(')', 1)[0]
@@ -218,10 +252,12 @@ class PysdHelper:
         exp_lst = re.split(',\s*(?![^()]*\))', in_expr)
         # order is a bit random but I haven't come across any model where a delay order of 100 has been used.
         # this could be handled as discussed here. https://github.com/JamesPHoughton/pysd/issues/147
+        if type == 'material':
+            exp_lst = exp_lst[:3]
         order = 100
         exp_lst.append(str(order))
         func_str = ', '.join(exp_lst)
-        el[0] = '%s=\n\tDELAY N(%s)\n\t' % (var, func_str)
+        el[0] = '%s=\n\t%s N(%s)\n\t' % (var, rep_func, func_str)
         return el
 
     @staticmethod
@@ -324,7 +360,11 @@ class PysdHelper:
             if self.constant(init) or ',' in init:
                 init_cnt += 1
                 # init expression gets a newline character to ensure that string doesn't get too long
-                init_expr = '\n\tinit %s' % var.strip()
+                if var.strip().startswith('"'):
+                    in_var = var.strip()[1:]
+                    init_expr = '\n\t"init %s' % in_var
+                else:
+                    init_expr = '\n\tinit %s' % var.strip()
                 expr_split[pos] = init_expr
                 expr = ', '.join(expr_split)
                 el[0] = '%s=%s(%s)\n\t' % (var, func, expr)
@@ -390,20 +430,24 @@ class PysdHelper:
         :return:
         """
         # setting up the counts
-        unchang_cnt, data_cnt, dfixed_cnt, random_cnt, init_cnt = 0, 0, 0, 0, 0
+        unchang_cnt, squote_cnt, data_cnt, dfixed_cnt, dinf_cnt, dmat_cnt, random_cnt, init_cnt = 0, 0, 0, 0, 0, 0, 0, 0
         # we should also report which variables that the delay fixed has been changed in
         dfixed_lst = []
+        dinf_lst = []
+        dmat_lst = []
         for el in self.el_lst:
             # deleting commments and unchangeables are run over all variables
             if self.del_comments:
                 el = self.pop_comments(el)
-            # this needs to be tested 05.06.18/sk
             if '==' in el[0]:
                 unchang_cnt += 1
                 el = self.elim_unchangeable(el)
+            if "'" in el[0]:
+                squote_cnt += 1
+                el = self.elim_singlequote(el)
+
             # data, DF, Random and SavePer are only executed based on keywords
             if self.data_src:
-
                 if ':INTERPOLATE:' in el[0]:
                     data_cnt += 1
                     el, newel = self.data_input_conversion(el)
@@ -413,7 +457,17 @@ class PysdHelper:
                 if 'DELAY FIXED' in el[0]:
                     dfixed_cnt += 1
                     dfixed_lst.append(el[0].split('=')[0])
-                    el = self.repl_df(el)
+                    el = self.repl_delay(el, 'fixed')
+            if self.set_DI:
+                if 'DELAY INFORMATION' in el[0]:
+                    dinf_cnt += 1
+                    dinf_lst.append(el[0].split('=')[0])
+                    el = self.repl_delay(el, 'information')
+            if self.set_DM:
+                if 'DELAY MATERIAL' in el[0]:
+                    dmat_cnt += 1
+                    dmat_lst.append(el[0].split('=')[0])
+                    el = self.repl_delay(el, 'material')
             if self.set_rand:
                 # this needs to be tested
                 if 'RANDOM 0 1' in el[0].replace('\n', ''):
@@ -425,15 +479,28 @@ class PysdHelper:
             # replace init is run over all variables again
             el, init_cnt = self.replace_init(el, init_cnt)
             # report tuple is created for the reporting
-            rep_tpl = ('PySD Helper', [unchang_cnt, data_cnt, dfixed_cnt, random_cnt, init_cnt], dfixed_lst,
-                       os.path.join(os.path.split(self.orig_folder)[1], self.filename).lstrip(
-                           '\\'), self.outname)
-            folder_lst = os.path.split(self.folder)
-            # report tuple is pickled and then used in initiate report in the battery
-            pickle_out = open(os.path.join(folder_lst[0], 'report', folder_lst[1],
-                                           '%s_1helper.pickle' % self.outname.rsplit('.', 1)[0]), 'wb')
-            pickle.dump(rep_tpl, pickle_out)
-            pickle_out.close()
+        cnt_lst = [unchang_cnt, squote_cnt, data_cnt, dfixed_cnt, dinf_cnt, dmat_cnt, random_cnt, init_cnt]
+        rep_lst = [self.outname]
+        rep_lst.extend(cnt_lst)
+        rep_tpl = ('PySD Helper', cnt_lst, dfixed_lst, dinf_lst, dmat_lst,
+                   os.path.join(os.path.split(self.orig_folder)[1], self.filename).lstrip(
+                       '\\'), self.outname)
+        helper_track_df = pd.DataFrame([rep_lst])
+        helper_track_df.columns = ['Name', '# of unchangeable variables changed', '# of single quotes removed',
+                                   '# of data sources replaced', '# of DELAY FIXED changed',
+                                   '# of DELAY INFORMATION changed', '# of DELAY MATERIAL changed',
+                                   '# of RANDOM 0 1 changed', '# of init variables added']
+        if os.path.isfile(os.path.join(self.folder, 'helper_track.csv')):
+            with open(os.path.join(self.folder, 'helper_track.csv'), 'a') as f:
+                helper_track_df.to_csv(f, header=False)
+        else:
+            helper_track_df.to_csv(os.path.join(self.folder, 'helper_track.csv'))
+        folder_lst = os.path.split(self.folder)
+        # report tuple is pickled and then used in initiate report in the battery
+        pickle_out = open(os.path.join(folder_lst[0], 'report', folder_lst[1],
+                                       '%s_1helper.pickle' % self.outname.rsplit('.', 1)[0]), 'wb')
+        pickle.dump(rep_tpl, pickle_out)
+        pickle_out.close()
 
     def write_file(self):
         """
@@ -442,7 +509,7 @@ class PysdHelper:
 
         :return: Treated mdl file
         """
-        with open(os.path.join(self.folder, self.outname), 'w') as in_file:
+        with open(os.path.join(self.folder, self.outname), 'w', encoding='utf-8') as in_file:
             for el in self.el_lst:
                 # adding the pieces back together
                 for i in el:
@@ -468,8 +535,13 @@ class PysdHelper:
 
         :return:
         """
-        self.get_elements_list()
-        self.read_data()
-        self.iterate_elements()
-        self.write_file()
-        self.move_orig()
+        try:
+            self.get_elements_list()
+            self.read_data()
+            self.iterate_elements()
+            self.write_file()
+            self.move_orig()
+        except Exception as e:
+            f = open(os.path.join(self.folder, 'helper_error.txt'), 'a', errors='replace')
+            f.write('%s : %s\n' % (str(self.filename), str(e)))
+            f.close()
