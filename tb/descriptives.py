@@ -2,9 +2,10 @@
 This code translates .mdl files and produces
     - csv file: detailed descriptives of all variables
     - doc file: file with information used later in the testing battery
+    - equi file: creates file for user input for equilibrium test
     - py file: translated .mdl file using pysd
     - model stats: model statistics of all files translated
-    - word analysis files: experimental code for later use (will be removed for launch)
+    - word analysis files: experimental code for later use
     - other testing files: collecting functions, gathering errors, etc.
 
 The descriptives add additional detail compared to pysd and
@@ -12,8 +13,10 @@ permit a quick review of the variables in an excel file
 
 Some sections are closely mirrored from pysd
 
-version 0.1
-02.03.18/sk
+This needs to be drastically improved 30.07.18/sk
+
+version 0.2
+30.07.18/sk
 """
 
 import os
@@ -22,24 +25,8 @@ import pandas as pd
 import re
 from timeit import default_timer as timer
 from collections import Counter
-from pathlib import Path
+from tb.tb_backend import utils
 from tb.tb_backend import fileops as fops
-
-
-
-
-def constant(expr):
-    """
-    testing if an expression is numeric
-
-    :param expr: any expression to be tested
-    :return: true if numeric, false if not numeric
-    """
-    try:
-        float(expr)
-        return True
-    except ValueError:
-        return False
 
 
 def flow_split(expr):
@@ -61,7 +48,7 @@ def flow_split(expr):
     # splitting the init off the expression
     flow, init = expr.rsplit(',', 1)
     # splitting the flows off, but avoiding splits between parentheses
-    flows = re.split('(".*?")|[+-/*]',flow)
+    flows = re.split('(".*?")|[+-/*]', flow)
     # removing empty strings in flows
     flows = [x for x in flows if x is not None]
     flows = [x for x in flows if x != '']
@@ -131,6 +118,8 @@ def get_vars(varlist):
 
     is run for both the elements and the builtins
 
+    the inner try except block ensures that table functions are also read in
+
     :param varlist: list of equation strings (unclean)
     :return: list of dicts with elements and builtins
     """
@@ -142,15 +131,20 @@ def get_vars(varlist):
             unit = unit.strip()
             comment = comment.strip()
             # name is left of =, expr on the right
-            name, expr = eqn.split('=', 1)
+            try:
+                name, expr = eqn.split('=', 1)
+            except ValueError:
+                name = eqn
+                expr = eqn
             components.append({'eqn': eqn,
-                           'unit': unit,
-                           'comment': comment,
-                           'name': name.strip(),
-                           'expr': expr.strip()})
+                               'unit': unit,
+                               'comment': comment,
+                               'name': name.strip(),
+                               'expr': expr.strip()})
         except ValueError:
             pass
     return components
+
 
 def corr_lists(varlist, builtins):
     """
@@ -185,7 +179,8 @@ def corr_lists(varlist, builtins):
         i = i + 1
     return varlist, builtins
 
-def ID_tables(var, tbl_functions):
+
+def id_tables(var, tbl_functions):
     """
     This identifies tables and replaces the table information with the string '(table_expr)' to
     facilitate calculating statistics
@@ -221,7 +216,8 @@ def ID_tables(var, tbl_functions):
         var['table expr'] = c[-1]
         var['expr'] = var['expr'].replace(c[-1], '(table_expr)')
         var['name'] = var['name'].replace(c[-1], '')
-    return(var)
+    # test with without parentheses 30.07.18/sk
+    return var
 
 
 def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
@@ -243,13 +239,13 @@ def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
     flows_list = []
     for entry in components:
         # if the expression is a constant, the type is always constant
-        if constant(entry['expr']):
+        if utils.constant(entry['expr']):
             entry['type'] = 'constant'
             entry['flow expr'] = 'NA'
             entry['init expr'] = 'NA'
             entry['table expr'] = 'NA'
         # if the expression starts with INTEG, it's always a stock
-        elif entry['expr'].startswith('INTEG'):
+        elif entry['expr'].startswith('INTEG') and not entry['expr'].startswith('INTEGER'):
             entry['type'] = 'stock'
             # flows differ from other auxiliaries that they are the only ones that can impact a stock
             # thus the flow names are saved in a list and changed later
@@ -257,6 +253,8 @@ def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
             for flow in flows:
                 if flow not in flows_list and len(flow) > 0:
                     flows_list.append(flow)
+            # an init variable list could be created here and init variables could be classified different
+            # than constants 06.07.18/sk
             entry['flow expr'] = flow_expr
             entry['init expr'] = init_expr
             entry['table expr'] = 'NA'
@@ -271,19 +269,38 @@ def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
         if entry['name'].split('[')[0] in flows_list or entry['name'] in flows_list:
             entry['type'] = 'flow'
         # then tables are identified with the ID tables function
-        entry = ID_tables(entry, tbl_functions)
-        #subscripts need to be named subscripts in this one
+        entry = id_tables(entry, tbl_functions)
+        # subscripts need to be named subscripts in this one
     for entry in components:
         # split should be on elements, not on the entire equation
         # this is to define the math types and separate the function types for statistics
         # this only works for functions that are at the beginning of the expression
-        func = entry['expr'].split('(', 1)[0].strip()
+        try:
+            func, expr = entry['expr'].split('(', 1)
+        except ValueError:
+            func = ''
+            expr = ''
+        func = func.strip()
+        # removing the closing bracket
+        expr = expr.rsplit(')', 1)[0]
+        # The code below splits first level commas, but not commas within brackets, such as in MAX ( X , Y )
+        # and returns 3 or 4 elements depending on which function
+        # This is separated in order to be able to replace the init element and put it back together
+        expr_split = re.split(',\s*(?![^()]*\))', expr)
         if func == 'A FUNCTION OF':
             entry['math type'] = 'incomplete equation'
             entry['function'] = func
         elif func in c_functions:
             entry['math type'] = 'complicated function'
             entry['function'] = func
+            if func in regfunc_lst:
+                pos = -1
+            elif func in nfunc_lst:
+                pos = -2
+            else:
+                pos = None
+            if pos is not None:
+                entry['init expr'] = expr_split[pos]
         elif func in s_functions:
             entry['math type'] = 'simple function'
             entry['function'] = func
@@ -295,7 +312,8 @@ def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
             entry['function'] = 'NA'
     return components
 
-#handling the subscripts
+
+# handling the subscripts
 
 def rem_subscripts(components):
     """
@@ -318,7 +336,7 @@ def rem_subscripts(components):
             if ins == 1:
                 ex = subs[-1].replace('(', '').replace(')', '')
                 bounds = re.split('([0-9]*)', ex)
-                bounds = [x for x in bounds if constant(x)]
+                bounds = [x for x in bounds if utils.constant(x)]
                 try:
                     ins = int(bounds[-1]) - int(bounds[0]) + 1
                 except:
@@ -351,14 +369,14 @@ def rem_subscripts(components):
             temp_els = [x for x in temp_els if x != '']
             i = 0
             for el in temp_els:
-               if constant(el):
-                   i = i + 1
+                if utils.constant(el):
+                    i = i + 1
             if len(temp_els) == ins and ins == i:
                 entry['type'] = 'subscripted constant'
 
     for entry in components:
         if entry['no of subs'] != 'NA':
-            #should probably remove emtpies here
+            # should probably remove emtpies here
             if entry['no of subs'] == 1 and entry['math type'] == 'regular' and len(entry['expr'].split(',')) > 1:
                 entry['det_sub_ins'] = len(entry['expr'].split(','))
             elif entry['no of subs'] > 1 and entry['math type'] == 'regular' and len(entry['expr'].split(';')) > 1:
@@ -368,7 +386,6 @@ def rem_subscripts(components):
         else:
             entry['det_sub_ins'] = 'NA'
     return components
-
 
 
 def collect_functions(components, collection, missing):
@@ -404,7 +421,7 @@ def equation_split(varlist, funclist, missing, t_function):
     """
     for var in varlist:
         e = re.split('(".*?")|\+|-|\*|/|\(|\)|\^|,|>|<', var['expr'])
-        e = [x for x in e if x != None]
+        e = [x for x in e if x is not None]
         e = [x.strip() for x in e]
         e = [x for x in e if x != '']
         # m collects the missing functions (statements in upper case) that are not at the beginning of the expression
@@ -418,12 +435,12 @@ def equation_split(varlist, funclist, missing, t_function):
                 missing.append(func)
         # types and subscripted constants don't need further information
         if var['type'] == 'constant' or var['type'] == 'subscripted constant':
-            nbr, e, hasinit = 0, 'NA', 'NA'
+            nbr, e, hasinit = 0, [], 'NA'
         # stocks have additional information here (number of elements and hasinit)
         elif var['type'] == 'stock':
             e = [x for x in e if x != 'INTEG']
             nbr = len(e) - 1
-            if constant(var['init expr']):
+            if utils.constant(var['init expr']):
                 hasinit = 'no'
             else:
                 hasinit = 'yes'
@@ -442,7 +459,17 @@ def equation_split(varlist, funclist, missing, t_function):
             else:
                 var['math type'] = 'simple function'
         var['no of functions'] = funcs
+        # splitting the elements in the init expression because we need them for the loop recognition
+        if var['init expr'] != 'NA':
+            ie = re.split('(".*?")|\+|-|\*|/|\(|\)|\^|,|>|<', var['init expr'])
+            ie = [x for x in ie if x is not None]
+            ie = [x.strip() for x in ie]
+            ie = [x for x in ie if x != '']
+            var['init elements'] = ie
+        else:
+            var['init elements'] = []
     return varlist
+
 
 def add_builtin(varlist, builtin, model_name):
     """
@@ -473,6 +500,7 @@ def add_builtin(varlist, builtin, model_name):
         var['Model name'] = model_name
     return varlist
 
+
 def corr_units(varlist):
     """
     The unit correction is necessary as in the case when there are subscripts,
@@ -494,6 +522,7 @@ def corr_units(varlist):
         if var['type'] != 'subscript list' and var['unit'] == '':
             var['unit'] = unit_dict.get(var['name'].split('[')[0])
     return varlist
+
 
 def calc_avg(varlist):
     """
@@ -527,6 +556,7 @@ def calc_avg(varlist):
         unit_per = 1
     return tot, avg, funcs, f_avg, cons, unit_per
 
+
 def word_analysis(varlist, worddict, wordlist):
     """
     Function to collect word use in models, collects a stream of words and a dictionary with number of uses
@@ -557,8 +587,9 @@ def word_analysis(varlist, worddict, wordlist):
         else:
             w_unit = None
         wordlist.append({'unit': w_unit,
-                          'words': w_list})
+                         'words': w_list})
     return worddict, wordlist
+
 
 def flagging(type_counter, func_counter, empty_stocks, varlist, builtins):
     """
@@ -596,7 +627,7 @@ def flagging(type_counter, func_counter, empty_stocks, varlist, builtins):
         # (there needs to be at least 0.5 flows per stock)
         # could be replaced with fs ratio from collect stats, but would require a
         # division by zero check anyway for next flag, so why bother?
-        if type_counter['flow']/type_counter['stock'] < 0.5:
+        if type_counter['flow'] / type_counter['stock'] < 0.5:
             flag = 'Yes'
             code = 'flow recognition'
     # if the previous test returns a zerodivision error, then there are no stocks in the model
@@ -605,12 +636,14 @@ def flagging(type_counter, func_counter, empty_stocks, varlist, builtins):
         code = 'No Stocks'
     return flag, code
 
-def doc(doc_name,doc_vars,model_doc):
+
+def doc(doc_name, doc_vars, model_doc):
     """
     this creates the doc folder with all the information that is used in further tests and
     is a selection of the descriptives
 
     The doc file uses the following columns:
+
     - Base Unit: for the x axis of plots
     - flow expr: for the equilibrium function
     - type: for the different type df (switches are not a type here)
@@ -618,13 +651,22 @@ def doc(doc_name,doc_vars,model_doc):
     - Py Name: For input dicts
     - elements: for distance calculations
     - TIME STEP: for the integration test
+    - function: used for init replacement in doc file
+    - Unit: used for plots
 
     :param doc_name: name of the doc file
     :param doc_vars: full descriptive database
     :param model_doc: doc from pysd
     :return: saved doc file
     """
+
     def fill_blanks(row):
+        """
+        Function to fill the blanks for the builtin variables coming from model.doc()
+
+        :param row: row to fill with NA where empty
+        :return: row: NA filled row
+        """
         # the builtins and init variables need to be added back to the list now for the doc,
         # they are coming from the model.doc() from pysd because init variables are only created there
         builtin_list = ['FINAL TIME', 'INITIAL TIME', 'TIME STEP', 'SAVEPER']
@@ -638,23 +680,30 @@ def doc(doc_name,doc_vars,model_doc):
                 row['type'] = 'undef'
             # here we just fill the remaining columns as they are irrelevant for both the builtins and the
             row['flow expr'] = 'NA'
-            row['elements'] = 'NA'
+            row['elements'] = []
+            row['init elements'] = []
+            row['function list'] = []
+            row['expr'] = 'NA'
+            row['table expr'] = 'NA'
             row['Base Unit'] = doc_vars.iloc[0]['Base Unit']
-            row['TIME STEP'] = doc_vars.iloc[0]['TIME STEP']
         return row
+
     # these are the dropped columns because they are not used from descriptives
-    drop_cols = ['INIT', 'eqn', 'unit', 'comment', 'expr', 'init expr', 'table expr', 'math type', 'function',
+    # last line is used for testing the _doc columns
+    drop_cols = ['INIT', 'eqn', 'unit', 'comment', 'init expr', 'math type',
                  'subs', 'no of subs', 'no of sub_ins', 'sub_expr', 'det_sub_ins', 'Number of elements',
-                 'function list', 'no of functions', 'FINAL TIME', 'INITIAL TIME',
-                 'Model name']
+                 'no of functions', 'FINAL TIME', 'INITIAL TIME', 'Model name',
+                 'TIME STEP', 'function']
     doc_vars.drop(drop_cols, axis=1, inplace=True)
     # merge with model.doc() from pysd to get the py names in the doc
     doc_vars = pd.merge(left=doc_vars, right=model_doc, how='outer', left_on='name', right_on='Real Name')
     # drop columns that are not used from model.doc()
-    drop_cols = ['Type', 'Comment', 'name', 'Unit']
+    drop_cols = ['Type', 'Comment', 'name']
     doc_vars.drop(drop_cols, axis=1, inplace=True)
     doc_vars.apply(fill_blanks, axis=1)
-    return fops.save_csv(doc_vars,doc_name,test)
+    fops.save_csv(doc_vars, doc_name, test)
+    return doc_vars
+
 
 def collect_stats(model_vars):
     """
@@ -691,7 +740,7 @@ def collect_stats(model_vars):
         d[var['math type']] += 1
         e[var['INIT']] += 1
         f[var['function']] += 1
-        if constant(var['flow expr']):
+        if utils.constant(var['flow expr']):
             emstocks += 1
     s_stocks = sum(x['no of sub_ins'] for x in model_vars if x['type'] == 'stock')
     s_aux = sum(x['no of sub_ins'] for x in model_vars if x['type'] == 'auxiliary')
@@ -700,7 +749,8 @@ def collect_stats(model_vars):
         fs_ratio = c['flow'] / c['stock']
     except ZeroDivisionError:
         fs_ratio = 0
-    return c,d,e,f,emstocks,s_stocks,s_aux,s_flow,fs_ratio
+    return c, d, e, f, emstocks, s_stocks, s_aux, s_flow, fs_ratio
+
 
 def list_combine():
     """
@@ -717,6 +767,7 @@ def list_combine():
         comb_func_list.append(f)
     for f in test_func_list:
         comb_func_list.append(f)
+
 
 def init(folder):
     """
@@ -738,15 +789,16 @@ def init(folder):
     # then we remove the .py files from the source folder
     # could potentially be an append function, but this is going to be run after hopefully extensive model changes,
     # so why bother?
-    fops.clear_files_type('source','.py')
+    fops.clear_files_type('source', '.py')
 
     # then we remove the .csv files, mainly time tracking files
-    fops.clear_files_type('source','.csv')
+    fops.clear_files_type('source', '.csv')
 
     # combine the lists
     list_combine()
 
-def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
+
+def descriptives(mdl_file, flag_count, word_dict, word_list, mis_func_list, rep_type='work'):
     """
     This function runs the descriptives for an individual file and is called from the full translate
 
@@ -757,6 +809,7 @@ def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
     - word analysis information
     - missing function collection
 
+    :param rep_type:
     :param mdl_file: string, .mdl file to be run through descriptives
     :param flag_count: int, number of flagged models previous to this one
     :param word_dict: dict, word dictionary with words previous to this one
@@ -766,7 +819,7 @@ def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
     """
     model_name = mdl_file.split('.')[0]
 
-    #code specific to the ISDC sample, returns garbage in other cases
+    # code specific to the ISDC sample, returns garbage in other cases
     year = re.split('_', model_name)[0]
 
     ind_start = timer()
@@ -804,7 +857,7 @@ def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
 
     # finishing the documentation of current model
     # csv file contains all descriptive information about the variables in the model
-    fops.save_lst_csv(model_vars,model_name,test,append=False)
+    fops.save_lst_csv(model_vars, model_name, test, append=False)
 
     # adding the current variables to the global variable collection
     for var in model_vars:
@@ -815,7 +868,7 @@ def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
     flag, code = flagging(c, f, emstocks, model_vars, built_ins)
     if flag == 'Yes':
         flag_count += 1
-        fops.move_mdl_debug(mdl_file,'flag')
+        fops.move_mdl_debug(mdl_file, 'flag')
 
     # individual operation of model is done here
     ind_end = timer()
@@ -853,11 +906,23 @@ def descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list):
                             'Time': ind_end - ind_start,
                             'Timestamp': ind_start})
 
-    return model_vars,flag_count,word_dict,word_list,mis_func_list
+    # doing the reporting for the html file
+    if rep_type == 'orig':
+        title = 'Original Model'
+    else:
+        title = 'Working Model'
+    orig_df = pd.DataFrame(model_vars)
+    sel = orig_df[orig_df['Number of elements'] == 1].count()['Number of elements']
+    base_lst = [orig_df['Base Unit'][0], orig_df['INITIAL TIME'][0], orig_df['FINAL TIME'][0], orig_df['TIME STEP'][0]]
+    cnt_lst = [len(model_vars), c['auxiliary'], c['constant'], c['flow'], c['stock'], c['table function']]
+    ind_lst = [avg, unit_per, fs_ratio, f_avg, e['no'] / (e['no'] + e['yes']), sel]
+    rep_tpl = (title, base_lst, cnt_lst, ind_lst)
+    return model_vars, flag_count, word_dict, word_list, mis_func_list, rep_tpl
 
-#Functions are above
 
-#initializing the output files
+# Functions are above
+
+# initializing the output files
 dbname = 'Var_DB'
 model_stat_file = 'Model_Stats'
 # These are for word analysis which is currently not further developed
@@ -869,7 +934,7 @@ track_name = 'tracking'
 err_name_adj = 'translation_errors_adjusted.txt'
 err_name_std = 'translation_errors_standard.txt'
 
-#initializing the collection lists for output files
+# initializing the collection lists for output files
 vardb = []
 track_lst = []
 model_stat_vars = []
@@ -893,7 +958,12 @@ simp_func_list = ['MIN', 'VMIN', 'MAX', 'VMAX', 'SIN', 'INITIAL', 'SQRT', 'ACTIV
 # (currently is not ignored)
 test_func_list = ['RANDOM UNIFORM', 'RANDOM 0 1' 'RANDOM NORMAL', 'STEP', 'PULSE', 'PULSE TRAIN', 'RAMP', 'RND']
 
-def full_translate(first_file=None,last_file=None):
+# documenting the init expr for all functions that have init variables
+regfunc_lst = ['INTEG', 'DELAY1I', 'DELAY3I', 'SMOOTHI', 'SMOOTH3I']
+nfunc_lst = ['DELAY N', 'SMOOTH N']
+
+
+def full_translate(first_file=None, last_file=None):
     """
     This function runs the descriptives and translation part for all the models in the testing folder
 
@@ -926,50 +996,137 @@ def full_translate(first_file=None,last_file=None):
     files = fops.load_files('mdl')
 
     for mdl_file in files[first_file:last_file]:
-        print(mdl_file)
+        print('Translating', mdl_file)
         model_count += 1
         model_name = mdl_file.split('.')[0]
-        fops.output_folder(model_name,active='doc')
-        doc_folder = os.path.join(source_folder,model_name,'doc')
+        fops.output_folder(model_name, active='doc')
         # doc file contains all the information needed for further steps in the testing battery
         doc_name = mdl_file.replace('.mdl', '_doc')
         # ind_track is to keep an overview of the created documents that are necessary for next steps
         ind_track = [mdl_file, 'no', 'no', 'no']
+        err_rep_adj = True
+        err_rep_std = True
         # adjusted translate for descriptives
-        try:
-            model_vars,flag_count,word_dict,word_list,mis_func_list = \
-                descriptives(mdl_file,flag_count,word_dict,word_list,mis_func_list)
+        if err_rep_adj:
+            try:
+                model_vars, flag_count, word_dict, word_list, mis_func_list, rep_tpl = \
+                    descriptives(mdl_file, flag_count, word_dict, word_list, mis_func_list)
+                ind_track[1] = 'yes'
+                doc_vars = pd.DataFrame(model_vars)
+            except Exception as e:
+                fops.write_error_file(model_name, e, err_name_adj)
+                err_adj += 1
+                rep_tpl = ('Working Model', [], [], [])
+                model_vars = []
+                doc_vars = pd.DataFrame(model_vars)
+        else:
+            model_vars, flag_count, word_dict, word_list, mis_func_list, rep_tpl = \
+                descriptives(mdl_file, flag_count, word_dict, word_list, mis_func_list)
             ind_track[1] = 'yes'
             doc_vars = pd.DataFrame(model_vars)
-        except Exception as e:
-            fops.write_error_file(model_name, e, err_name_adj)
-            err_adj += 1
+        fops.rep_work(mdl_file.rsplit('.', 1)[0], rep_tpl)
         # full pysd translation
-        try:
-            # also create the .py file for good measure
+        if err_rep_std:
+            try:
+                # also create the .py file for good measure
+                model = pysd.read_vensim(os.path.join(source_folder, mdl_file))
+                ind_track[2] = 'yes'
+            except Exception as e:
+                fops.write_error_file(model_name, e, err_name_std)
+                err_std += 1
+                fops.move_mdl_debug(mdl_file, 'trans_debug')
+        else:
             model = pysd.read_vensim(os.path.join(source_folder, mdl_file))
             ind_track[2] = 'yes'
-        except Exception as e:
-            fops.write_error_file(model_name, e, err_name_std)
-            err_std += 1
-            fops.move_mdl_debug(mdl_file,'trans_debug')
-        #creation of docfile
+        # creation of docfile
         try:
-            doc(doc_name, doc_vars, model.doc())
+            fulldoc = doc(doc_name, doc_vars, model.doc())
             ind_track[3] = 'yes'
+            const = fulldoc.loc[fulldoc['type'] == 'constant'].reset_index()
+            const = const[['Py Name', 'Real Name', 'Unit', 'expr']]
+            const['fix value'] = 'NA'
+            const['global minimum'] = 'NA'
+            const['global maximum'] = 'NA'
+            equi_name = mdl_file.replace('.mdl', '_equi')
+            fops.save_csv(const, equi_name, test)
         except NameError:
             pass
         except ValueError:
             ind_track[3] = 'EMPTY'
+        mdl_err_lst = []
+        model_df = pd.DataFrame(model_vars)
+        for i, row in model_df.iterrows():
+            if row['unit'] is None:
+                mdl_err_lst.append(('doc', 'Doc Error', 'No Unit Set', row['name'], '', ''))
+        if len(mdl_err_lst) > 0:
+            fops.init_run_error_file(mdl_err_lst, 'error_file')
         track_lst.append(ind_track)
-        #print('Models: ', model_count)
-        #print('Err_adj: ', err_adj)
-        #print('Flags: ', flag_count)
-        #print('Err_std: ', err_std)
 
+    # transferring the tracking file to .csv
+    fops.save_lst_csv(track_lst, track_name, 'report', columns=['Name', 'DB', 'python', 'doc'], append=False)
+
+    total_end = timer()
+    total_elapsed = (total_end - total_start) / 60
+
+    print('Time elapsed for descriptive tests: ', total_elapsed, 'Minutes')
+    print('pySD compatible: ', model_count - err_std)
+    return total_elapsed
+
+
+def create_report(first_file=None, last_file=None):
+    """
+    This function collects the stats and produces the reports, this is done before the models are run through
+    the PySD helper
+
+    Output is:
+    - descriptives
+    - statistic collections
+
+    :param first_file: first file to be tested (index on list), defaults to None, meaning the first file in the list
+    :param last_file: last file to be tested (index on list), defaults to None, meaning the last file in the list
+    :return: time elapsed for the entire test as float
+    """
+
+    # initializing the counts
+    model_count = 0
+    flag_count = 0
+    err_adj = 0
+    err_std = 0
+
+    # explorative collection for word analysis
+    word_dict = {}
+    word_list = []
+    # missing function list
+    mis_func_list = []
+
+    total_start = timer()
+
+    # selecting the files
+    files = fops.load_files('mdl')
+
+    for mdl_file in files[first_file:last_file]:
+        print('Gathering data for', mdl_file)
+        model_count += 1
+        model_name = mdl_file.split('.')[0]
+        fops.output_folder(model_name, active='doc')
+        # ind_track is to keep an overview of the created documents that are necessary for next steps
+        err_rep_adj = True
+        # adjusted translate for descriptives
+        if err_rep_adj:
+            try:
+                model_vars, flag_count, word_dict, word_list, mis_func_list, rep_tpl = \
+                    descriptives(mdl_file, flag_count, word_dict, word_list, mis_func_list, 'orig')
+            except Exception as e:
+                fops.write_error_file(model_name, e, err_name_adj)
+                err_adj += 1
+                rep_tpl = ('Original Model', [], [], [])
+        else:
+            model_vars, flag_count, word_dict, word_list, mis_func_list, rep_tpl = \
+                descriptives(mdl_file, flag_count, word_dict, word_list, mis_func_list, 'orig')
+        fops.rep_orig(mdl_file.rsplit('.', 1)[0], rep_tpl)
 
     # transferring the general DB to .csv
-    fops.save_lst_csv(vardb,dbname,'report',append=False)
+    fops.save_lst_csv(vardb, dbname, 'report', append=False)
     # transferring the missing function list to .csv
     fops.save_lst_csv(mis_func_list, mis_name, 'report', append=False)
     # transferring the model statistics to .csv
@@ -980,9 +1137,7 @@ def full_translate(first_file=None,last_file=None):
     word_df = pd.DataFrame(word_dict, index=['count'])
     word_df = word_df.T
     # transferring the word dict to .csv
-    fops.save_csv(word_df,word_dict_file,'report')
-    # transferring the tracking file to .csv
-    fops.save_lst_csv(track_lst,track_name,'report',columns=['Name', 'DB', 'python', 'doc'], append=False)
+    fops.save_csv(word_df, word_dict_file, 'report')
 
     total_end = timer()
     total_elapsed = (total_end - total_start) / 60
