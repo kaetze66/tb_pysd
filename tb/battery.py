@@ -5,8 +5,23 @@ and the pipe class which handles the tracking and support for MP runs
 maybe it would make sense to put the folder dict here and pass it on to make it more consistent
 currently it's in basetest and savingpipe, which is a potential cause for errors if they are not the same
 
-Version 0.2
-Update 11.06.18/sk
+
+battery class has all the methods for running the entire battery of tests
+
+can be run single thread and MP
+
+MP will produce compatibility issues, but is a lot faster
+
+battery has PySD helper now included
+battery mainly does:
+
+- set up of test list
+- writing of pipe line files (for MP) or handling of pipe line (for non MP)
+- determining the MP settings
+
+
+Version 0.3
+Update 30.07.18/sk
 """
 
 import os
@@ -25,23 +40,10 @@ from tb.tb_backend.report import Report
 
 class Battery:
     """
-    battery class has all the methods for running the entire battery of tests
+    Battery handles the setting up and execution of the tests
 
-    can be run single thread and MP
-
-    MP will produce compatibility issues, but is a lot faster
-
-    battery has PySD helper now included
-    battery mainly does:
-
-    - set up of test list
-    - writing of pipe line files (for MP) or handling of pipe line (for non MP)
-    - determining the MP settings
-    - handles the reporting for the translation
-    - handles the error tracking in the execution
     """
-
-    def __init__(self, folder, mp_setting=True, first=None, last=None, distance=True):
+    def __init__(self, folder, mp_setting=True, first=None, last=None, distance=False, knockout=False):
         # total elapsed is currently broken, need to be added again
         self.total_elapsed = 0
         # test list is initialized for adding the tests later on
@@ -55,6 +57,8 @@ class Battery:
         self.mp_setting = mp_setting
         # distance is not in the config file because it's currently useless
         self.distance = distance
+        # knockout is not in the config file because it's currently wrong 18.06.18/sk
+        self.knockout = knockout
 
         # defining the report and debug folder because folder dicts are limited to tests (defined in base test)
         # could also be passed from here, but well...
@@ -71,8 +75,6 @@ class Battery:
         self.montecarlo_runs = self.cf['test parameters'].getint('montecarlo_runs', fallback=100)
         self.equilibrium_method = self.cf['test parameters'].getint('equilibrium_method', fallback=1)
         self.equilibrium_increment = self.cf['test parameters'].getfloat('equilibrium_increment', fallback=0.2)
-        self.equilibrium_max = (self.cf['test parameters'].getint('equilibrium_min', fallback=0),
-                                self.cf['test parameters'].getint('equilibrium_max', fallback=10))
         self.equilibrium_incset = self.cf['test parameters'].getboolean('equilibrium_incset', fallback=True)
         self.extreme_max = self.cf['test parameters'].getint('extreme_max', fallback=10)
         # reading in the setting for the pysd helper from the config file
@@ -118,18 +120,33 @@ class Battery:
 
         :return:
         """
-        self.file_lst = [f for f in os.listdir(self.folder) if f.endswith('.mdl')]
+        file_lst = [f for f in os.listdir(self.folder) if f.endswith('.mdl')]
         # this could potentially lead to the result that a model that has the original file name ending with treated,
         # not being treated, but then just rename and it works
-        self.file_lst = [f for f in self.file_lst if not f.endswith('_treated.mdl')]
+        file_lst = [f for f in file_lst if not f.endswith('_treated.mdl')]
 
-        for file in self.file_lst:
+        for file in file_lst:
             model = PysdHelper(self.folder, file)
             model.run_helper()
+
+    def clear_error_files(self):
+        """
+        error files are only removed when a new model is translated, presumably after new model changes have been done
+        this allows running tests independently on the same translated version while keeping the errors
+
+        :return:
+        """
+        file_lst = [f for f in os.listdir(self.folder) if f.endswith('.mdl')]
+        for file in file_lst:
+            try:
+                os.remove(os.path.join(self.folder, file.rsplit('.', 1)[0], 'error_file.csv'))
+            except FileNotFoundError:
+                pass
 
     def run_translate(self):
         """
         run translate calls the full translate method from the descriptives.py and is run after the pysd helper
+
         :return:
         """
         if not self.pysdhelper_setting:
@@ -164,7 +181,9 @@ class Battery:
                 olfiles = []
             if olfiles:
                 for olfile in olfiles:
-                    os.remove(os.path.join(self.folder, file.rsplit('.', 1)[0], olfile))
+                    # error file needs to be kept because it might have errors from translation in it
+                    if not olfile == 'error_file.csv':
+                        os.remove(os.path.join(self.folder, file.rsplit('.', 1)[0], olfile))
 
     def init_reports(self):
         """
@@ -178,6 +197,7 @@ class Battery:
         # grabbing the pickle file list from the report folder
         pfile_lst = [f for f in os.listdir(self.report_folder) if f.endswith('.pickle')]
         for file in self.file_lst:
+            print('Creating report for', file)
             report = Report(self.folder, file)
             # setting the styles to make sure the tables all look the same
             report.set_styles()
@@ -240,10 +260,10 @@ class Battery:
         switches = self.cf['component control'].getboolean('switches', fallback=True)
         timestep = self.cf['component control'].getboolean('timestep', fallback=True)
         montecarlo = self.cf['component control'].getboolean('montecarlo', fallback=True)
-        knockout = self.cf['component control'].getboolean('knockout', fallback=True)
         extreme = self.cf['component control'].getboolean('extreme', fallback=True)
         horizon = self.cf['component control'].getboolean('horizon', fallback=True)
         for mdl_file in self.file_lst[self.first_file:self.last_file]:
+            err_code = 'Translation Error'
             try:
                 # this has to be in the right order for the testing sequence
                 # if run single thread, the list is going to determine order
@@ -253,49 +273,58 @@ class Battery:
                 # 20+ are other tests
                 # 99 is used by the dummy test generator
                 if equilibrium:
+                    err_code = 'Translation Error equi'
                     test = Equilibrium(self.folder, mdl_file, self.equilibrium_method, self.equilibrium_increment,
-                                       self.equilibrium_max, self.equilibrium_incset)
+                                       self.equilibrium_incset)
                     test.testID = '00'
                     self.test_lst.append(test)
                 # distance is currently useless, but might be useful for other tests at some point
                 # distance is currently just handled in testing mode and the setting comes from the testing battery
                 # contrary to all other tests which get the settings from the config file
                 if self.distance:
+                    err_code = 'Translation Error dist'
                     test = Distance(self.folder, mdl_file)
                     test.testID = '01'
                     self.test_lst.append(test)
                 if montecarlo:
+                    err_code = 'Translation Error mc'
                     test = MonteCarlo(self.folder, mdl_file, self.montecarlo_percentage, self.montecarlo_runs)
                     test.testID = '10'
                     self.test_lst.append(test)
                 if sensitivity:
+                    err_code = 'Translation Error sens'
                     test = Sensitivity(self.folder, mdl_file, self.sensitivity_percentage)
                     test.testID = '11'
                     self.test_lst.append(test)
                 if extreme:
+                    err_code = 'Translation Error ext'
                     test = Extreme(self.folder, mdl_file, self.extreme_max)
                     test.testID = '20'
                     self.test_lst.append(test)
                 if timestep:
+                    err_code = 'Translation Error ts'
                     test = TimeStep(self.folder, mdl_file)
                     test.testID = '21'
                     self.test_lst.append(test)
-                if knockout:
+                if self.knockout:
+                    err_code = 'Translation Error ko'
                     test = KnockOut(self.folder, mdl_file)
                     test.testID = '22'
                     self.test_lst.append(test)
                 if horizon:
+                    err_code = 'Translation Error hori'
                     test = Horizon(self.folder, mdl_file)
                     test.testID = '23'
                     self.test_lst.append(test)
                 if switches:
+                    err_code = 'Translation Error swit'
                     test = Switches(self.folder, mdl_file)
                     test.testID = '24'
                     self.test_lst.append(test)
             except Exception as e:
                 # there should be no errors here but better safe than sorry
                 f = open(os.path.join(self.folder, 'exec_error_file.txt'), 'a')
-                f.write('Translation error, %s : %s\n' % (str(mdl_file), str(e)))
+                f.write('%s, %s : %s\n' % (err_code, str(mdl_file), str(e)))
                 f.close()
 
     def create_batch_file(self):
@@ -366,6 +395,7 @@ class Battery:
                 # if pysd helper is on, then statistics should be gathered first
                 self.run_report()
                 self.run_pysdhelper()
+            self.clear_error_files()
             self.run_translate()
         # previous methods load their own files, now the file list is held steady
         self.load_files()
@@ -434,11 +464,37 @@ class Battery:
             # however, it makes sense to have functions if possible just in one place, so for clean code,
             # all reporting is moved to the pipe class
             pipe = Pipe(self.folder, self.cores, self.processes, self.max_tasks)
+            error_reporting = False
             for test in self.test_lst:
-                try:
+                if error_reporting:
+                    try:
+                        # the structure for test execution has to stay the same for all tests
+                        # exec file writes a helper function with this structure
+                        test.initialize_test()
+                        test.initiate_folder()
+                        test.prepare_test()
+                        if test.MP:
+                            # helper functions take on the iteration through the running of tests that the mp would do
+                            # returning the result and collecting it wouldn't be necessary here
+                            # but structure needs to be kept
+                            res = test.run_test_helper()
+                            test.collect_res(res)
+                        else:
+                            test.run_test()
+                        # helper functions take on the iteration through the saving that the mp would do
+                        test.save_full_output_helper()
+                        test.save_ind_output_helper()
+                        test.save_output()
+                        test.write_report()
+                    except Exception as e:
+                        # only execution errors are tracked here, not runtime errors
+                        pipe.track_errors(test, e)
+                else:
+                    # this is just to test non MP test execution
                     # the structure for test execution has to stay the same for all tests
                     # exec file writes a helper function with this structure
                     test.initialize_test()
+                    test.initiate_folder()
                     test.prepare_test()
                     if test.MP:
                         # helper functions take on the iteration through the running of tests that the mp would do
@@ -453,9 +509,6 @@ class Battery:
                     test.save_ind_output_helper()
                     test.save_output()
                     test.write_report()
-                except Exception as e:
-                    # only execution errors are tracked here, not runtime errors
-                    pipe.track_errors(test, e)
                 test.end_test()
                 pipe.add_track(test)
                 print('Model:', test.out_name, 'Test:', test.test_name)
@@ -538,11 +591,15 @@ class Pipe:
             time_df.to_csv(os.path.join(self.folder, 'TimeDB.csv'), index=True, header=True)
         # counts need to be pickled, since in mp pipe cannot keep track of them
         # (pipe is relaunched with every mp_main process)
-        pickle_in = open(os.path.join(self.folder, 'counts.pickle'), 'rb')
-        counts = pickle.load(pickle_in)
-        counts['models'] += 1
-        # reporting the progress to make sure that pipe is running and hasn't killed itself
-        print(counts['models'], 'tests done out of', counts['total'], 'with', counts['errors'], 'errors')
-        pickle_out = open(os.path.join(self.folder, 'counts.pickle'), 'wb')
-        pickle.dump(counts, pickle_out)
-        pickle_out.close()
+        try:
+            # exception handling is necessary when dummy tests are run
+            pickle_in = open(os.path.join(self.folder, 'counts.pickle'), 'rb')
+            counts = pickle.load(pickle_in)
+            counts['models'] += 1
+            # reporting the progress to make sure that pipe is running and hasn't killed itself
+            print(counts['models'], 'tests done out of', counts['total'], 'with', counts['errors'], 'errors')
+            pickle_out = open(os.path.join(self.folder, 'counts.pickle'), 'wb')
+            pickle.dump(counts, pickle_out)
+            pickle_out.close()
+        except FileNotFoundError:
+            pass
