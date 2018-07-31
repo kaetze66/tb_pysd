@@ -408,8 +408,8 @@ class Test:
         :return: time list, list of tuples
         """
         stats_df = pd.read_csv(os.path.join(self.folder_dict['doc'], '%s.csv' % self.out_name))
-        time_info = [(self.out_name, self.elapsed / 60, stats_df.loc(axis=1)['FINAL TIME'][0] -
-                      stats_df.loc(axis=1)['INITIAL TIME'][0], stats_df.loc(axis=1)['TIME STEP'][0],
+        time_info = [(self.out_name, self.elapsed / 60, stats_df['FINAL TIME'][0] -
+                      stats_df['INITIAL TIME'][0], stats_df['TIME STEP'][0],
                       len(stats_df.index))]
         self.save_lst_csv(time_info, '%s_time' % self.test, 'source', columns=['Model Name', 'Time for Test',
                                                                                'Time Horizon', 'Time Step',
