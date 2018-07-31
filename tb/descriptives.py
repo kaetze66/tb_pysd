@@ -25,9 +25,20 @@ import pandas as pd
 import re
 from timeit import default_timer as timer
 from collections import Counter
-from tb.tb_backend import utils
 from tb.tb_backend import fileops as fops
 
+def constant(expr):
+    """
+    testing if an expression is numeric
+
+    :param expr: any expression to be tested
+    :return: true if numeric, false if not numeric
+    """
+    try:
+        float(expr)
+        return True
+    except ValueError:
+        return False
 
 def flow_split(expr):
     """
@@ -239,7 +250,7 @@ def get_types(components, tbl_functions, c_functions, s_functions, t_functions):
     flows_list = []
     for entry in components:
         # if the expression is a constant, the type is always constant
-        if utils.constant(entry['expr']):
+        if constant(entry['expr']):
             entry['type'] = 'constant'
             entry['flow expr'] = 'NA'
             entry['init expr'] = 'NA'
@@ -336,7 +347,7 @@ def rem_subscripts(components):
             if ins == 1:
                 ex = subs[-1].replace('(', '').replace(')', '')
                 bounds = re.split('([0-9]*)', ex)
-                bounds = [x for x in bounds if utils.constant(x)]
+                bounds = [x for x in bounds if constant(x)]
                 try:
                     ins = int(bounds[-1]) - int(bounds[0]) + 1
                 except:
@@ -369,7 +380,7 @@ def rem_subscripts(components):
             temp_els = [x for x in temp_els if x != '']
             i = 0
             for el in temp_els:
-                if utils.constant(el):
+                if constant(el):
                     i = i + 1
             if len(temp_els) == ins and ins == i:
                 entry['type'] = 'subscripted constant'
@@ -440,7 +451,7 @@ def equation_split(varlist, funclist, missing, t_function):
         elif var['type'] == 'stock':
             e = [x for x in e if x != 'INTEG']
             nbr = len(e) - 1
-            if utils.constant(var['init expr']):
+            if constant(var['init expr']):
                 hasinit = 'no'
             else:
                 hasinit = 'yes'
@@ -740,7 +751,7 @@ def collect_stats(model_vars):
         d[var['math type']] += 1
         e[var['INIT']] += 1
         f[var['function']] += 1
-        if utils.constant(var['flow expr']):
+        if constant(var['flow expr']):
             emstocks += 1
     s_stocks = sum(x['no of sub_ins'] for x in model_vars if x['type'] == 'stock')
     s_aux = sum(x['no of sub_ins'] for x in model_vars if x['type'] == 'auxiliary')
