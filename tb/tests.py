@@ -339,7 +339,7 @@ class Equilibrium(Test):
         self.cf.read(os.path.join(os.path.split(folder)[0], '_config', 'settings.ini'))
         self.equi_res = self.cf['tests'].getfloat('equi_res', fallback=0.1)
         self.equi_iter = self.cf['tests'].getfloat('equi_iter', fallback=0)
-        self.equi_maxiter = self.cf['tests'].getint('equi_res', fallback=20)
+        self.equi_maxiter = self.cf['tests'].getint('equi_maxiter', fallback=20)
 
     def initialize_test(self, equimode=False):
         """

@@ -577,7 +577,7 @@ class Test:
                 # those runs should technically not even show up (some do, some don't)
                 # topic to discuss with PySD 180722/sk
                 if run.chk_run():
-                    self.model.add_run(run.run, run.name, run.full_ID)
+                    self.model.add_run(run.run, run.name, run.full_id)
                     if self.test in self.test_with_sens:
                         run.treat_run(self.base.run)
                     else:
