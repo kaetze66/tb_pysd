@@ -50,7 +50,7 @@ class Run:
         self.cf = ConfigParser()
         # this needs to be checked because of os.getcwd() 30.07.18/sk
         # otherwise we need to bring the model path down
-        self.cf.read(os.path.join(os.getcwd(), '_config', 'settings.ini'))
+        self.cf.read(os.path.join(os.getcwd().replace('\\run_pipe',''), '_config', 'settings.ini'))
         # precision for rounding and finding negative flows and stocks
         # unlimited precision is sometimes generating negative values where there shouldn't be any
         # defining the precision, decimal points after the comma

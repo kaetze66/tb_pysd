@@ -44,12 +44,11 @@ class AugModel(Model):
         :return:
         """
         self.cf = ConfigParser()
-        # this needs to be checked because of os.getcwd() 30.07.18/sk
-        # otherwise we need to bring the model path down
-        self.cf.read(os.path.join(os.getcwd(), '_config', 'settings.ini'))
+        # if this is run with MP, then the current working directory is the run pipe
+        # if not, then it is ok
+        self.cf.read(os.path.join(os.getcwd().replace('\\run_pipe',''), '_config', 'settings.ini'))
         # precision for rounding and finding negative flows and stocks
         # unlimited precision is sometimes generating negative values where there shouldn't be any
-        # this should go to the settings file
         self.precision = self.cf['model'].getint('round_precision', fallback=8)
         self.max_ts = self.cf['model'].getint('max_ts', fallback=10)
         # list for tracking errors
@@ -319,5 +318,8 @@ class AugModel(Model):
         :param source: test where the check originates from
         :return:
         """
-        if not self.err_lst:
-            self.err_lst.append((source, 'No Error', '', '', '', ''))
+        try:
+            if not self.err_lst:
+                self.err_lst.append((source, 'No Error', '', '', '', ''))
+        except AttributeError:
+            print('run time error')
