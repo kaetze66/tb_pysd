@@ -199,7 +199,8 @@ class AugModel(Model):
         """
 
         errors = []
-        flow_df = run[flow_names]
+        # as type added to avoid problems when a df is interpeted with an object type column
+        flow_df = run[flow_names].astype(np.float64)
         # iterating over each flow in the df
         for column in flow_df:
             # ignores the flows that have net in the name
@@ -226,7 +227,8 @@ class AugModel(Model):
         :return:
         """
         errors = []
-        stock_df = run[stock_names]
+        # as type added to avoid problems when a df is interpeted with an object type column
+        stock_df = run[stock_names].astype(np.float64)
         # iterating over each stock
         for column in stock_df:
             # reports time stamps at which this error occurs (index is timestamps for run)
