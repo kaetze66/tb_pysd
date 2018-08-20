@@ -124,6 +124,43 @@ class Sensitivity(Test):
                 self.run_lst.append(Run(name, sp, self.exo_names, w_params, self.endo_names,
                                         '%s=%s' % (row['Real Name'], w_params.iloc[i])))
 
+    def collect_res(self, res):
+        """
+        collects the results from the test execution and prepares them for further use
+
+        sens has additional sensitivity calcs for each run
+
+
+        :param res: result list from run execution
+        """
+        for i, run in enumerate(self.run_lst):
+            err_lst = res[i][2]
+            if not res[i][1].empty:
+                # this should be eliminated in a revision, results should come in as a list of run objects 250718/sk
+                run.run = res[i][1].astype('float64', copy=False)
+                # run.chk_run() tests if there are np.nan in the first line,
+                # which means the run couldn't be executed properly and shouldn't be added
+                # those runs should technically not even show up (some do, some don't)
+                # topic to discuss with PySD 180722/sk
+                if run.chk_run():
+                    self.model.add_run(run.run, run.name, run.full_id)
+                    run.treat_run(self.base.run)
+                else:
+                    # we remove negative stock and flow errors here because those runs are not supposed
+                    # to have run in the first place
+                    # negative stock and flow errors in this case arise from np.inf in some variables
+                    # caused by division by 0
+                    # while they technically should be fine, it's just confusing for anyone to have an error
+                    # other than the division by 0
+                    err_lst = [x for x in res[i][2] if x[1] not in ['Negative Flow', 'Negative Stock']]
+                # print is just for testing
+                print(i)
+            self.model.err_lst.extend(err_lst)
+        # opening pipes all over the place might be not the best idea, one pipe for all saving might be better
+        pipe = Plass(self)
+        for key, full_df in self.model.full_df_dict.items():
+            pipe.save_csv(full_df, 'full_df', key)
+
     def save_ind_output_mp(self, run):
         """
 
@@ -1206,14 +1243,14 @@ class Distance(Test):
 
     def run_test_mp(self, run=None):
         """
-
+        this should not be necessary 190818/sk
         :param run:
         """
         pass
 
     def collect_res(self, res):
         """
-
+        this should not be necessary 190818/sk
         :param res:
         """
         pass

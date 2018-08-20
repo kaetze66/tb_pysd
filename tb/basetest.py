@@ -80,8 +80,6 @@ class Test:
         self.cf.read(os.path.join(os.path.split(folder)[0], '_config', 'settings.ini'))
         self.node_width = self.cf['basetest'].get('node_width', fallback='2')
         self.node_height = self.cf['basetest'].get('node_height', fallback='1.2')
-        # test with sens is just to avoid having to calculate the sens and norm runs for every test
-        self.test_with_sens = ['sens']
 
     # Folder Operations #
     def make_folder_dict(self):
@@ -578,10 +576,7 @@ class Test:
                 # topic to discuss with PySD 180722/sk
                 if run.chk_run():
                     self.model.add_run(run.run, run.name, run.full_id)
-                    if self.test in self.test_with_sens:
-                        run.treat_run(self.base.run)
-                    else:
-                        run.var_types()
+                    run.var_types()
                 else:
                     # we remove negative stock and flow errors here because those runs are not supposed
                     # to have run in the first place
