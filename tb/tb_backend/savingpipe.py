@@ -3,6 +3,9 @@ saving pipe includes all saving and plotting operation from runs
 saves plots, heatmaps, csv to the respective folders
 attached to a saving operation
 
+todo:
+-look at python-graphviz
+
 Version 0.2
 Update 30.07.18/sk
 """

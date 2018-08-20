@@ -464,7 +464,9 @@ class Battery:
             # however, it makes sense to have functions if possible just in one place, so for clean code,
             # all reporting is moved to the pipe class
             pipe = Pipe(self.folder, self.cores, self.processes, self.max_tasks)
-            error_reporting = False
+            # if error reporting is True, then the execution is not halted on an error
+            # and the error is tracked in the exec_error_file
+            error_reporting = True
             for test in self.test_lst:
                 if error_reporting:
                     try:
